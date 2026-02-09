@@ -18,22 +18,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Caddy for ARM64
+      - name: Build Caddy (ARM64) with alidns plugin
         run: |
           cat > Dockerfile << 'EOF'
-          FROM --platform=$BUILDPLATFORM caddy:builder AS builder
-          ARG TARGETPLATFORM
-          RUN xcaddy build --with github.com/caddy-dns/alidns
+          # 使用 xcaddy 在 Linux 主机上交叉编译 ARM64 二进制
+          FROM --platform=linux/amd64 caddy:builder AS builder
+          RUN apt-get update && apt-get install -y libc6-dev-arm64-cross gcc-aarch64-linux-gnu
+          ENV CC=aarch64-linux-gnu-gcc
+          ENV CGO_ENABLED=1
+          RUN xcaddy build \
+              --output /caddy-arm64 \
+              --with github.com/caddy-dns/alidns \
+              --target linux/arm64
 
           FROM caddy:latest
-          COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+          COPY --from=builder /caddy-arm64 /usr/bin/caddy
+          RUN chmod +x /usr/bin/caddy
           EOF
 
+          docker buildx create --use
           docker buildx build \
             --platform linux/arm64 \
             -t caddy-alidns:arm64 \
             --output type=docker,name=caddy-alidns:arm64 .
-
+      
       - name: Save image to tar
         run: |
           docker save caddy-alidns:arm64 > caddy-alidns-arm64.tar
