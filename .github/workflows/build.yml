@@ -1,0 +1,35 @@
+name: Build and Export Caddy with alidns
+
+on:
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Caddy with alidns plugin
+        run: |
+          cat > Dockerfile << 'EOF'
+          FROM caddy:builder AS builder
+          RUN xcaddy build --with github.com/caddy-dns/alidns
+          FROM caddy:latest
+          COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+          EOF
+
+          docker build -t caddy-alidns .
+
+      - name: Save image to tar
+        run: |
+          docker save caddy-alidns > caddy-alidns.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddy-alidns-tar
+          path: caddy-alidns.tar
